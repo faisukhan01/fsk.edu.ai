@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  title     String   @default("New Chat")
+  courseId  String?
+  messages  ChatMessage[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String   // "user" or "assistant"
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  courseId  String?
+  color     String   @default("#ffffff")
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FlashcardDeck {
+  id       String     @id @default(cuid())
+  title    String
+  courseId String?
+  cards    Flashcard[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Flashcard {
+  id       String        @id @default(cuid())
+  deckId   String
+  deck     FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  front    String
+  back     String
+  mastered Boolean       @default(false)
+  createdAt DateTime     @default(now())
+}
+
+model StudySession {
+  id        String   @id @default(cuid())
+  type      String   // "pomodoro" | "free"
+  duration  Int      // in minutes
+  courseId  String?
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Quiz {
+  id        String   @id @default(cuid())
+  title     String
+  courseId  String?
+  questions QuizQuestion[]
+  score     Int?
+  totalQuestions Int
+  createdAt DateTime @default(now())
+}
+
+model QuizQuestion {
+  id        String @id @default(cuid())
+  quizId    String
+  quiz      Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  question  String
+  options   String  // JSON string of options array
+  correctAnswer String
+  userAnswer String?
+  isCorrect Boolean?
+}
+
+model Course {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  color     String   @default("#10b981")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudyGoal {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  targetMinutes Int
+  completedMinutes Int @default(0)
+  deadline    DateTime?
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Summary {
+  id          String   @id @default(cuid())
+  originalText String
+  summary     String
+  style       String   @default("brief")
+  wordCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+model SolvedProblem {
+  id        String   @id @default(cuid())
+  question  String
+  solution  String
+  type      String   @default("math")
+  createdAt DateTime @default(now())
+}
+
+model MoodEntry {
+  id           String   @id @default(cuid())
+  mood         String
+  note         String?
+  studyMinutes Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+model Achievement {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  title       String
+  description String
+  icon        String    @default("🏆")
+  category    String    @default("general")
+  unlockedAt  DateTime?
+  createdAt   DateTime  @default(now())
+}

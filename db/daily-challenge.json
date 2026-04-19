@@ -1,0 +1,18 @@
+{
+  "date": "2026-04-19",
+  "question": "Which of the following organelles is known as the 'powerhouse of the cell' due to its role in ATP production?",
+  "options": [
+    "Nucleus",
+    "Mitochondria",
+    "Endoplasmic reticulum",
+    "Golgi apparatus"
+  ],
+  "correctIndex": 1,
+  "explanation": "Mitochondria are double-membraned organelles that generate most of the cell's supply of adenosine triphosphate (ATP), used as a source of chemical energy.",
+  "subject": "Biology",
+  "difficulty": "Medium",
+  "stats": {
+    "attempted": 0,
+    "correct": 0
+  }
+}

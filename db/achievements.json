@@ -1,0 +1,128 @@
+[
+  {
+    "id": "ach_0",
+    "key": "first_chat",
+    "title": "First Conversation",
+    "description": "Complete your first AI chat",
+    "icon": "💬",
+    "category": "getting-started",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_1",
+    "key": "quiz_master",
+    "title": "Quiz Master",
+    "description": "Complete 3 quizzes",
+    "icon": "🧠",
+    "category": "knowledge",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_2",
+    "key": "flashcard_creator",
+    "title": "Card Architect",
+    "description": "Create 3 flashcard decks",
+    "icon": "🃏",
+    "category": "knowledge",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_3",
+    "key": "note_taker",
+    "title": "Note Taker",
+    "description": "Create 5 notes",
+    "icon": "📝",
+    "category": "knowledge",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_4",
+    "key": "streak_3",
+    "title": "3-Day Streak",
+    "description": "Study 3 days in a row",
+    "icon": "🔥",
+    "category": "consistency",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_5",
+    "key": "streak_7",
+    "title": "Week Warrior",
+    "description": "Study 7 days in a row",
+    "icon": "⚡",
+    "category": "consistency",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_6",
+    "key": "focus_5",
+    "title": "Deep Focus",
+    "description": "Complete 5 Pomodoro sessions",
+    "icon": "🎯",
+    "category": "study-focus",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_7",
+    "key": "focus_25",
+    "title": "Focus Champion",
+    "description": "Complete 25 Pomodoro sessions",
+    "icon": "🏆",
+    "category": "study-focus",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_8",
+    "key": "summarizer",
+    "title": "Quick Learner",
+    "description": "Create your first summary",
+    "icon": "📄",
+    "category": "knowledge",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_9",
+    "key": "solver",
+    "title": "Problem Solver",
+    "description": "Solve your first problem",
+    "icon": "🧮",
+    "category": "knowledge",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_10",
+    "key": "goal_setter",
+    "title": "Goal Setter",
+    "description": "Set your first study goal",
+    "icon": "🎯",
+    "category": "study-focus",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_11",
+    "key": "course_enrolled",
+    "title": "Enrolled",
+    "description": "Add your first course",
+    "icon": "🎓",
+    "category": "getting-started",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_12",
+    "key": "explorer",
+    "title": "Explorer",
+    "description": "Try all features (visit each view at least once)",
+    "icon": "🗺️",
+    "category": "getting-started",
+    "unlockedAt": null
+  },
+  {
+    "id": "ach_13",
+    "key": "mood_logger",
+    "title": "Self-Aware",
+    "description": "Log 5 mood entries",
+    "icon": "😊",
+    "category": "consistency",
+    "unlockedAt": null
+  }
+]
