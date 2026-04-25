@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "next dev -p 3000 -H 0.0.0.0 2>&1 | tee dev.log",
     "serve": "cd .next/standalone && HOSTNAME=0.0.0.0 PORT=3000 setsid bun server.js > ../prod.log 2>&1 & disown",
-    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "start": "cd .next/standalone && HOSTNAME=0.0.0.0 PORT=3000 bun server.js 2>&1 | tee ../server.log",
+    "build": "prisma generate && next build",
+    "postinstall": "prisma generate",
+    "start": "next start",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
