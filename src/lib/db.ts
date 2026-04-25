@@ -20,6 +20,7 @@ function createPrismaClient() {
 
   // Fallback to local SQLite for local dev (without Turso)
   return new PrismaClient({
+    datasourceUrl: process.env.DATABASE_URL || 'file:./db/custom.db',
     log: process.env.NODE_ENV !== 'production' ? ['query'] : [],
   })
 }
