@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateJSON } from '@/lib/ai';
 import { db } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
+import { getSessionFromRequest } from '@/lib/auth';
 
 interface QuizQuestion {
   question: string;
@@ -15,6 +16,9 @@ interface QuizData {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const { topic, numQuestions = 5, difficulty = 'medium', courseId } = await req.json();
 
@@ -51,6 +55,7 @@ Make questions educational, clear, and unambiguous. Ensure exactly one correct a
     await db.quiz.create({
       data: {
         id: quizId,
+        userId: session.userId,
         title: quizData.title || `Quiz: ${topic}`,
         courseId: courseId || null,
         totalQuestions: quizData.questions.length,
@@ -75,9 +80,13 @@ Make questions educational, clear, and unambiguous. Ensure exactly one correct a
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const quizzes = await db.quiz.findMany({
+      where: { userId: session.userId },
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: { questions: true },
@@ -90,8 +99,15 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const { quizId, answers } = await req.json();
+
+    // Verify quiz belongs to user
+    const quiz = await db.quiz.findFirst({ where: { id: quizId, userId: session.userId } });
+    if (!quiz) return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
 
     let correct = 0;
     for (const answer of answers) {

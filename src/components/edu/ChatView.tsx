@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
@@ -88,6 +87,7 @@ export function ChatView() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -159,7 +159,15 @@ export function ChatView() {
     const docInfo = attachments.filter(a => a.type === 'document');
     let textContent = input.trim();
     if (docInfo.length > 0) {
-      textContent += `\n\n${docInfo.map(d => `[Attached: ${d.name} (${formatFileSize(d.size)})]`).join('\n')}`;
+      const docTexts = docInfo.map(d => {
+        // If dataUrl is plain text (not base64), include the content directly
+        if (!d.dataUrl.startsWith('data:')) {
+          return `--- File: ${d.name} ---\n${d.dataUrl}\n--- End of ${d.name} ---`;
+        }
+        // For base64 binary files (PDF, DOCX, etc.) we can only mention them
+        return `[Attached: ${d.name} (${formatFileSize(d.size)}) — binary format, cannot be read directly. Please describe what you need help with.]`;
+      });
+      textContent += (textContent ? '\n\n' : '') + docTexts.join('\n\n');
     }
     const userMsg: ChatMessage = {
       role: 'user',
@@ -304,16 +312,47 @@ export function ChatView() {
     if (!files) return;
     Array.from(files).forEach(file => {
       if (file.size > 10 * 1024 * 1024) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        setAttachments(prev => [...prev, {
-          id: crypto.randomUUID(),
-          type: file.type.startsWith('image/') ? 'image' : 'document',
-          name: file.name, size: file.size,
-          dataUrl: reader.result as string, mimeType: file.type,
-        }]);
-      };
-      reader.readAsDataURL(file);
+      const isImage = file.type.startsWith('image/');
+      const isText = file.type === 'text/plain' || file.type === 'text/csv' ||
+        file.name.endsWith('.txt') || file.name.endsWith('.csv') ||
+        file.name.endsWith('.md') || file.name.endsWith('.json');
+
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachments(prev => [...prev, {
+            id: crypto.randomUUID(),
+            type: 'image',
+            name: file.name, size: file.size,
+            dataUrl: reader.result as string, mimeType: file.type,
+          }]);
+        };
+        reader.readAsDataURL(file);
+      } else if (isText) {
+        // Read text files as plain text so the AI can actually see the content
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachments(prev => [...prev, {
+            id: crypto.randomUUID(),
+            type: 'document',
+            name: file.name, size: file.size,
+            dataUrl: reader.result as string, mimeType: file.type,
+          }]);
+        };
+        reader.readAsText(file);
+      } else {
+        // For binary docs (PDF, DOCX, etc.) store as base64 dataUrl
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachments(prev => [...prev, {
+            id: crypto.randomUUID(),
+            type: 'document',
+            name: file.name, size: file.size,
+            dataUrl: reader.result as string, mimeType: file.type,
+          }]);
+        };
+        reader.readAsDataURL(file);
+      }
     });
     e.target.value = '';
     setShowAttachMenu(false);
@@ -422,12 +461,12 @@ export function ChatView() {
   const canSend = (input.trim() || attachments.length > 0) && !isLoading;
 
   const suggestions = [
-    { text: 'Explain quantum computing simply', icon: '💡' },
-    { text: 'Key concepts in machine learning?', icon: '🤖' },
-    { text: 'Help me with calculus derivatives', icon: '📐' },
-    { text: 'Explain the OSI model', icon: '🌐' },
-    { text: 'Solve: integral of x² dx', icon: '🔢' },
-    { text: 'Explain photosynthesis step by step', icon: '🌱' },
+    { text: 'Explain quantum computing simply' },
+    { text: 'Key concepts in machine learning?' },
+    { text: 'Help me with calculus derivatives' },
+    { text: 'Explain the OSI model' },
+    { text: 'Solve: integral of x² dx' },
+    { text: 'Explain photosynthesis step by step' },
   ];
 
   return (
@@ -437,58 +476,122 @@ export function ChatView() {
       <AnimatePresence>
         {showHistory && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-20" onClick={() => setShowHistory(false)} />
-            <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="fixed top-0 left-0 bottom-0 z-30 w-72 bg-card border-r border-border shadow-2xl flex flex-col">
-              <div className="flex items-center justify-between px-4 py-3.5 border-b">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-                    <MessageSquare className="w-3.5 h-3.5 text-white" />
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-20"
+              onClick={() => setShowHistory(false)}
+            />
+            <motion.div
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className="fixed top-0 right-0 bottom-0 z-30 w-80 bg-card border-l border-border shadow-2xl flex flex-col"
+            >
+              {/* Sidebar header */}
+              <div className="flex items-center justify-between px-4 py-4 border-b bg-gradient-to-r from-emerald-500/5 to-teal-500/5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-sm shadow-emerald-500/20">
+                    <MessageSquare className="w-4 h-4 text-white" />
                   </div>
-                  <span className="font-semibold text-sm">Chat History</span>
-                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{conversations.length}</Badge>
+                  <div>
+                    <p className="font-semibold text-sm leading-tight">Chat History</p>
+                    <p className="text-[10px] text-muted-foreground">{conversations.length} conversation{conversations.length !== 1 ? 's' : ''}</p>
+                  </div>
                 </div>
-                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={() => setShowHistory(false)}>
-                  <X className="w-3.5 h-3.5" />
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setShowHistory(false)}>
+                  <X className="w-4 h-4" />
                 </Button>
               </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+
+              {/* New chat button */}
+              <div className="px-3 pt-3 pb-2">
+                <Button
+                  className="w-full h-9 text-xs gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-sm shadow-emerald-500/20 border-0"
+                  onClick={newChat}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Conversation
+                </Button>
+              </div>
+
+              {/* Conversation list */}
+              <div className="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
                 {conversations.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-                    <MessageSquare className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                    <p className="text-xs text-muted-foreground">No conversations yet</p>
-                  </div>
-                ) : conversations.map(conv => (
-                  <button key={conv.id} onClick={() => loadConversation(conv.id)}
-                    className={`group w-full text-left px-3 py-2.5 rounded-lg transition-all relative ${
-                      currentConversationId === conv.id
-                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-l-2 border-l-emerald-500'
-                        : 'hover:bg-accent border-l-2 border-l-transparent'
-                    }`}>
-                    <p className={`text-xs font-medium truncate ${currentConversationId === conv.id ? 'text-emerald-700 dark:text-emerald-300' : ''}`}>
-                      {truncate(conv.title, 32)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
-                        <Hash className="w-2.5 h-2.5" />{conv.messageCount}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
-                        <Clock className="w-2.5 h-2.5" />{getRelativeTime(conv.updatedAt)}
-                      </span>
+                  <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+                    <div className="w-14 h-14 rounded-2xl bg-muted/60 flex items-center justify-center mb-3">
+                      <MessageSquare className="w-6 h-6 text-muted-foreground/40" />
                     </div>
-                    <button onClick={(e) => deleteConversation(conv.id, e)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-muted-foreground/40 hover:text-destructive transition-all">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </button>
-                ))}
-              </div>
-              <div className="p-3 border-t">
-                <Button variant="outline" className="w-full h-8 text-xs gap-1.5 rounded-lg border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400" onClick={newChat}>
-                  <Plus className="w-3.5 h-3.5" /> New Conversation
-                </Button>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">No conversations yet</p>
+                    <p className="text-xs text-muted-foreground/60">Start chatting and your history will appear here</p>
+                  </div>
+                ) : (() => {
+                  // Group conversations by date
+                  const now = new Date();
+                  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                  const yesterdayStart = todayStart - 86400000;
+                  const weekStart = todayStart - 6 * 86400000;
+
+                  const groups: { label: string; items: ConversationSummary[] }[] = [
+                    { label: 'Today', items: [] },
+                    { label: 'Yesterday', items: [] },
+                    { label: 'This Week', items: [] },
+                    { label: 'Older', items: [] },
+                  ];
+
+                  conversations.forEach(conv => {
+                    const t = new Date(conv.updatedAt).getTime();
+                    if (t >= todayStart) groups[0].items.push(conv);
+                    else if (t >= yesterdayStart) groups[1].items.push(conv);
+                    else if (t >= weekStart) groups[2].items.push(conv);
+                    else groups[3].items.push(conv);
+                  });
+
+                  return groups.filter(g => g.items.length > 0).map(group => (
+                    <div key={group.label}>
+                      <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider px-3 py-2 mt-1">
+                        {group.label}
+                      </p>
+                      {group.items.map(conv => (
+                        <button
+                          key={conv.id}
+                          onClick={() => loadConversation(conv.id)}
+                          className={`group w-full text-left px-3 py-2.5 rounded-xl transition-all relative mb-0.5 ${
+                            currentConversationId === conv.id
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 ring-1 ring-emerald-200 dark:ring-emerald-800'
+                              : 'hover:bg-accent'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 pr-6">
+                            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+                              currentConversationId === conv.id ? 'bg-emerald-500' : 'bg-muted-foreground/20'
+                            }`} />
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-xs font-medium truncate leading-snug ${
+                                currentConversationId === conv.id ? 'text-emerald-700 dark:text-emerald-300' : 'text-foreground'
+                              }`}>
+                                {truncate(conv.title, 34)}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] text-muted-foreground/50 flex items-center gap-0.5">
+                                  <Hash className="w-2.5 h-2.5" />{conv.messageCount} msgs
+                                </span>
+                                <span className="text-[10px] text-muted-foreground/50">·</span>
+                                <span className="text-[10px] text-muted-foreground/50 flex items-center gap-0.5">
+                                  <Clock className="w-2.5 h-2.5" />{getRelativeTime(conv.updatedAt)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => deleteConversation(conv.id, e)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground/40 hover:text-destructive transition-all"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </button>
+                      ))}
+                    </div>
+                  ));
+                })()}
               </div>
             </motion.div>
           </>
@@ -497,68 +600,127 @@ export function ChatView() {
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b bg-card/80 backdrop-blur-sm shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-sm shadow-emerald-500/20 shrink-0">
-            <Sparkles className="w-4 h-4 text-white" />
+        {/* Left: branding */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0 shadow-sm shadow-emerald-500/20">
+            <img src="/fsk-logo.png" alt="FSK EDU" className="w-full h-full object-cover" />
           </div>
-          <div className="min-w-0">
-            <h2 className="font-semibold text-sm leading-tight">FSK EDU AI Teacher</h2>
+          <div className="min-w-0 hidden sm:block">
+            <h2 className="font-semibold text-sm leading-tight truncate">FSK EDU AI Teacher</h2>
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-              <span className="text-[11px] text-muted-foreground">Online — Ask me anything</span>
+              <span className="text-[10px] text-muted-foreground">Online · Ask me anything</span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-0.5 shrink-0">
+
+        {/* Right: actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Clear chat */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-accent" onClick={clearChat}>
+              <button
+                onClick={clearChat}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[11px] font-medium text-muted-foreground border border-border/60 bg-muted/40 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all"
+              >
                 <Trash2 className="w-3.5 h-3.5" />
-              </Button>
+                <span className="hidden sm:inline">Clear</span>
+              </button>
             </TooltipTrigger>
-            <TooltipContent>Clear chat</TooltipContent>
+            <TooltipContent>Clear current chat</TooltipContent>
           </Tooltip>
+
+          {/* New chat */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-accent" onClick={newChat}>
+              <button
+                onClick={newChat}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[11px] font-medium text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all"
+              >
                 <Plus className="w-3.5 h-3.5" />
-              </Button>
+                <span className="hidden sm:inline">New Chat</span>
+              </button>
             </TooltipTrigger>
-            <TooltipContent>New chat</TooltipContent>
+            <TooltipContent>Start a new conversation</TooltipContent>
+          </Tooltip>
+
+          {/* History */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-[11px] font-medium border transition-all ${
+                  showHistory
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'text-muted-foreground border-border/60 bg-muted/40 hover:bg-accent hover:text-foreground hover:border-border'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">History</span>
+                {conversations.length > 0 && (
+                  <span className={`flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold leading-none ${
+                    showHistory ? 'bg-background text-foreground' : 'bg-emerald-500 text-white'
+                  }`}>
+                    {conversations.length > 9 ? '9+' : conversations.length}
+                  </span>
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>View chat history</TooltipContent>
           </Tooltip>
         </div>
       </div>
 
       {/* ── Messages ── */}
       <div className="flex-1 overflow-y-auto chat-pattern-bg" ref={scrollRef}>
-        <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+        <div className="max-w-3xl mx-auto px-4 py-3 space-y-3">
 
           {/* Empty state */}
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-                className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center mb-5 shadow-xl shadow-emerald-500/20">
-                <Sparkles className="w-8 h-8 text-white" />
+            <div className="flex flex-col items-center justify-center py-4 text-center">
+              {/* Logo */}
+              <motion.div
+                animate={{ y: [0, -6, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                className="mb-3"
+              >
+                <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-2xl shadow-emerald-500/20 ring-4 ring-emerald-500/10">
+                  <img src="/fsk-logo.png" alt="FSK EDU" className="w-full h-full object-cover" />
+                </div>
               </motion.div>
-              <h3 className="text-xl font-bold mb-1.5">How can I help you <span className="text-emerald-500">learn</span>?</h3>
-              <p className="text-sm text-muted-foreground mb-6 max-w-sm">Ask me about any subject — I'll explain it clearly, step by step.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 w-full max-w-2xl">
+
+              <h3 className="text-xl font-bold mb-1 tracking-tight">
+                How can I help you <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-teal-500">learn</span>?
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4 max-w-xs leading-relaxed">
+                Your personal AI teacher — ask about any subject and I'll explain it clearly, step by step.
+              </p>
+
+              {/* Suggestion cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full max-w-2xl mb-3">
                 {suggestions.map((s, i) => (
-                  <motion.button key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 * i }}
+                  <motion.button
+                    key={i}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 * i, duration: 0.25 }}
                     onClick={() => { setInput(s.text); textareaRef.current?.focus(); }}
-                    className="text-left text-xs p-3 rounded-xl border border-border/70 bg-card hover:bg-accent hover:border-emerald-400/40 transition-all duration-150 group">
-                    <span className="mr-1.5">{s.icon}</span>{s.text}
+                    className="text-left p-3 rounded-xl border border-border/60 bg-card hover:bg-accent hover:border-emerald-400/50 hover:shadow-sm transition-all duration-150 group"
+                  >
+                    <span className="text-[11px] font-medium text-foreground/75 group-hover:text-foreground leading-snug">{s.text}</span>
                   </motion.button>
                 ))}
               </div>
-              <div className="flex flex-wrap justify-center gap-2 mt-5">
+
+              {/* Capability pills */}
+              <div className="flex flex-wrap justify-center gap-1.5">
                 {[
-                  { icon: <ImageIcon className="w-3 h-3" />, label: 'Images' },
-                  { icon: <FileText className="w-3 h-3" />, label: 'Documents' },
-                  { icon: <Mic className="w-3 h-3" />, label: 'Voice' },
-                  { icon: <Globe className="w-3 h-3" />, label: 'Web Search' },
+                  { icon: <ImageIcon className="w-3 h-3" />, label: 'Images', color: 'text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800' },
+                  { icon: <FileText className="w-3 h-3" />, label: 'Documents', color: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800' },
+                  { icon: <Mic className="w-3 h-3" />, label: 'Voice', color: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800' },
+                  { icon: <Globe className="w-3 h-3" />, label: 'Web Search', color: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800' },
                 ].map((f, i) => (
-                  <span key={i} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted/60 text-[10px] text-muted-foreground">
+                  <span key={i} className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-medium ${f.color}`}>
                     {f.icon}{f.label}
                   </span>
                 ))}
@@ -568,59 +730,67 @@ export function ChatView() {
 
           {/* Message list */}
           {messages.map((msg) => (
-            <motion.div key={msg.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            <motion.div key={msg.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
               className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
 
               {/* Avatar */}
-              <Avatar className="w-7 h-7 mt-0.5 shrink-0 ring-1 ring-border/40">
+              <Avatar className={`w-8 h-8 mt-0.5 shrink-0 ring-2 ${msg.role === 'user' ? 'ring-emerald-500/30' : 'ring-amber-400/30'}`}>
                 <AvatarFallback className={msg.role === 'user'
-                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-[10px] font-semibold'
-                  : 'bg-gradient-to-br from-amber-400 to-orange-500 text-white text-[10px] font-semibold'}>
+                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-[10px] font-bold'
+                  : 'bg-gradient-to-br from-amber-400 to-orange-500 text-white text-[10px] font-bold'}>
                   {msg.role === 'user' ? 'You' : 'AI'}
                 </AvatarFallback>
               </Avatar>
 
               <div className={`flex flex-col max-w-[82%] sm:max-w-[75%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
 
+                {/* Sender label */}
+                <span className="text-[10px] font-medium text-muted-foreground/60 mb-1 px-1">
+                  {msg.role === 'user' ? 'You' : 'FSK AI Teacher'}
+                </span>
+
                 {/* Bubble */}
                 {msg.role === 'user' ? (
-                  <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white rounded-2xl rounded-br-sm px-3.5 py-2.5 shadow-sm">
+                  <div className="bg-gradient-to-br from-emerald-600 to-teal-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 shadow-md shadow-emerald-500/20">
                     {msg.images && msg.images.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-2">
                         {msg.images.map((img, i) => (
-                          <img key={i} src={img} alt="" className="max-h-40 rounded-lg object-cover shadow-sm" />
+                          <img key={i} src={img} alt="" className="max-h-40 rounded-xl object-cover shadow-sm" />
                         ))}
                       </div>
                     )}
                     <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
                   </div>
                 ) : (
-                  <Card className="border-0 shadow-sm bg-card rounded-2xl rounded-bl-sm overflow-hidden">
-                    <CardContent className="p-3.5 sm:p-4 text-sm">
+                  <div className="bg-card border border-border/60 rounded-2xl rounded-bl-sm overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 text-sm">
                       {msg.images && msg.images.length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-3">
                           {msg.images.map((img, i) => (
-                            <img key={i} src={img} alt="" className="max-h-40 rounded-lg object-cover shadow-sm" />
+                            <img key={i} src={img} alt="" className="max-h-40 rounded-xl object-cover shadow-sm" />
                           ))}
                         </div>
                       )}
                       <div className="markdown-content prose prose-sm dark:prose-invert max-w-none
+                        [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
                         prose-p:my-1.5 prose-p:leading-relaxed
                         prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
                         prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5
-                        prose-code:text-emerald-600 dark:prose-code:text-emerald-400 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
-                        prose-pre:bg-muted prose-pre:rounded-xl prose-pre:text-xs
-                        prose-blockquote:border-l-emerald-400 prose-blockquote:text-muted-foreground
-                        prose-strong:text-foreground prose-a:text-emerald-600 dark:prose-a:text-emerald-400">
+                        prose-code:text-emerald-600 dark:prose-code:text-emerald-400 prose-code:bg-emerald-50 dark:prose-code:bg-emerald-950/40 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs prose-code:font-mono
+                        prose-pre:bg-muted/80 prose-pre:rounded-xl prose-pre:text-xs prose-pre:my-2 prose-pre:border prose-pre:border-border/50
+                        prose-blockquote:border-l-emerald-400 prose-blockquote:text-muted-foreground prose-blockquote:my-2 prose-blockquote:bg-muted/30 prose-blockquote:rounded-r-lg prose-blockquote:py-1
+                        prose-strong:text-foreground prose-a:text-emerald-600 dark:prose-a:text-emerald-400 prose-a:no-underline hover:prose-a:underline
+                        prose-hr:border-border/50">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 )}
 
                 {/* Meta row */}
                 <div className={`flex items-center gap-1 mt-1.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <span className="text-[10px] text-muted-foreground/50 px-0.5">
+                  <span className="text-[10px] text-muted-foreground/40 px-1">
                     {msg.timestamp ? formatTime(new Date(msg.timestamp)) : ''}
                   </span>
                   {msg.mode === 'websearch' && (
@@ -629,44 +799,44 @@ export function ChatView() {
                     </Badge>
                   )}
                   {msg.role === 'assistant' && (
-                    <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg px-1 py-0.5">
+                    <div className="flex items-center gap-0.5 bg-muted/60 border border-border/40 rounded-lg px-1 py-0.5">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <button className="p-1 rounded hover:bg-accent transition-colors" onClick={() => setReaction(msg.id, 'up')}>
-                            <ThumbsUp className={`w-3 h-3 ${msg.reactions === 'up' ? 'text-emerald-500' : 'text-muted-foreground/60 hover:text-emerald-500'}`} />
+                          <button className="p-1 rounded-md hover:bg-background transition-colors" onClick={() => setReaction(msg.id, 'up')}>
+                            <ThumbsUp className={`w-3 h-3 ${msg.reactions === 'up' ? 'text-emerald-500 fill-emerald-500' : 'text-muted-foreground/50 hover:text-emerald-500'}`} />
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>Good response</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <button className="p-1 rounded hover:bg-accent transition-colors" onClick={() => setReaction(msg.id, 'down')}>
-                            <ThumbsDown className={`w-3 h-3 ${msg.reactions === 'down' ? 'text-rose-500' : 'text-muted-foreground/60 hover:text-rose-500'}`} />
+                          <button className="p-1 rounded-md hover:bg-background transition-colors" onClick={() => setReaction(msg.id, 'down')}>
+                            <ThumbsDown className={`w-3 h-3 ${msg.reactions === 'down' ? 'text-rose-500 fill-rose-500' : 'text-muted-foreground/50 hover:text-rose-500'}`} />
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>Needs improvement</TooltipContent>
                       </Tooltip>
-                      <div className="w-px h-3 bg-border/50 mx-0.5" />
+                      <div className="w-px h-3 bg-border/60 mx-0.5" />
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <button className="p-1 rounded hover:bg-accent transition-colors" onClick={() => copyText(msg.content, msg.id)}>
-                            {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 text-muted-foreground/60 hover:text-foreground" />}
+                          <button className="p-1 rounded-md hover:bg-background transition-colors" onClick={() => copyText(msg.content, msg.id)}>
+                            {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 text-muted-foreground/50 hover:text-foreground" />}
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>Copy</TooltipContent>
+                        <TooltipContent>{copiedId === msg.id ? 'Copied!' : 'Copy'}</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <button className="p-1 rounded hover:bg-accent transition-colors" onClick={() => speakText(msg.content)}>
-                            {isSpeaking ? <VolumeX className="w-3 h-3 text-rose-400" /> : <Volume2 className="w-3 h-3 text-muted-foreground/60 hover:text-foreground" />}
+                          <button className="p-1 rounded-md hover:bg-background transition-colors" onClick={() => speakText(msg.content)}>
+                            {isSpeaking ? <VolumeX className="w-3 h-3 text-rose-400" /> : <Volume2 className="w-3 h-3 text-muted-foreground/50 hover:text-foreground" />}
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>{isSpeaking ? 'Stop' : 'Read aloud'}</TooltipContent>
+                        <TooltipContent>{isSpeaking ? 'Stop reading' : 'Read aloud'}</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <button className="p-1 rounded hover:bg-accent transition-colors" onClick={() => regenerate(msg.id)}>
-                            <RotateCcw className="w-3 h-3 text-muted-foreground/60 hover:text-foreground" />
+                          <button className="p-1 rounded-md hover:bg-background transition-colors" onClick={() => regenerate(msg.id)}>
+                            <RotateCcw className="w-3 h-3 text-muted-foreground/50 hover:text-foreground" />
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>Regenerate</TooltipContent>
@@ -680,23 +850,26 @@ export function ChatView() {
 
           {/* Typing indicator */}
           {isLoading && (
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
-              <Avatar className="w-7 h-7 mt-0.5 shrink-0 ring-1 ring-border/40">
-                <AvatarFallback className="bg-gradient-to-br from-amber-400 to-orange-500 text-white text-[10px] font-semibold">AI</AvatarFallback>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
+              <Avatar className="w-8 h-8 mt-0.5 shrink-0 ring-2 ring-amber-400/30">
+                <AvatarFallback className="bg-gradient-to-br from-amber-400 to-orange-500 text-white text-[10px] font-bold">AI</AvatarFallback>
               </Avatar>
-              <Card className="border-0 shadow-sm bg-card rounded-2xl rounded-bl-sm">
-                <CardContent className="p-3.5">
-                  <div className="flex items-center gap-2.5">
+              <div>
+                <span className="text-[10px] font-medium text-muted-foreground/60 mb-1 block px-1">FSK AI Teacher</span>
+                <div className="bg-card border border-border/60 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-3">
                     <div className="typing-bounce">
                       <div className="typing-bounce-dot" />
                       <div className="typing-bounce-dot" />
                       <div className="typing-bounce-dot" />
                     </div>
-                    <span className="text-xs text-muted-foreground">{webSearchEnabled ? 'Searching the web...' : 'Thinking...'}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {webSearchEnabled ? 'Searching the web…' : 'Thinking…'}
+                    </span>
                     {webSearchEnabled && <Loader2 className="w-3 h-3 text-teal-500 animate-spin" />}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </motion.div>
           )}
         </div>
@@ -760,34 +933,39 @@ export function ChatView() {
       </AnimatePresence>
 
       {/* ── Input Area ── */}
-      <div className="border-t bg-card/60 backdrop-blur-sm px-3 sm:px-4 pt-2.5 pb-3 shrink-0">
+      <div className="border-t bg-card/80 backdrop-blur-sm px-3 sm:px-4 pt-3 pb-4 shrink-0">
         <div className="max-w-3xl mx-auto">
 
-          {/* Web search toggle — only when chatting */}
+          {/* Web search toggle */}
           {messages.length > 0 && (
-            <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
+            <div className="flex items-center gap-2 mb-2.5">
+              <button
+                onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all border ${
                   webSearchEnabled
-                    ? 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/30'
-                    : 'bg-muted/50 text-muted-foreground border border-transparent hover:bg-muted'
-                }`}>
+                    ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-400/40 shadow-sm'
+                    : 'bg-muted/40 text-muted-foreground border-transparent hover:bg-muted hover:border-border/60'
+                }`}
+              >
                 <Globe className={`w-3 h-3 ${webSearchEnabled ? 'text-teal-500' : ''}`} />
-                Search web
+                Web Search
                 {webSearchEnabled && <Zap className="w-2.5 h-2.5 text-teal-500" />}
               </button>
             </div>
           )}
 
-          {/* Input row */}
-          <div className="flex items-end gap-2">
-            {/* Attach */}
-            <div className="relative">
+          {/* Input box */}
+          <div className="relative flex items-end gap-2 bg-background border border-border/70 rounded-2xl shadow-sm focus-within:border-emerald-400/60 focus-within:shadow-md focus-within:shadow-emerald-500/5 transition-all px-2 py-2">
+
+            {/* Attach button */}
+            <div className="relative shrink-0">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"
-                    className={`h-9 w-9 rounded-xl shrink-0 ${showAttachMenu ? 'bg-accent' : 'hover:bg-accent'}`}
-                    onClick={() => setShowAttachMenu(!showAttachMenu)}>
+                  <Button
+                    variant="ghost" size="icon"
+                    className={`h-8 w-8 rounded-xl ${showAttachMenu ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                    onClick={() => setShowAttachMenu(!showAttachMenu)}
+                  >
                     <Paperclip className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
@@ -797,18 +975,24 @@ export function ChatView() {
                 {showAttachMenu && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
-                    <motion.div initial={{ opacity: 0, y: 4, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.95 }}
                       transition={{ duration: 0.12 }}
-                      className="absolute bottom-full left-0 mb-2 z-20 w-48 rounded-xl border border-border/80 bg-popover shadow-lg p-1.5">
+                      className="absolute bottom-full left-0 mb-2 z-20 w-52 rounded-2xl border border-border/80 bg-popover shadow-xl p-2"
+                    >
                       {[
-                        { icon: <ImageIcon className="w-4 h-4 text-sky-500" />, label: 'Image', sub: 'PNG, JPG up to 10MB', bg: 'bg-sky-100 dark:bg-sky-900/40' },
-                        { icon: <FileText className="w-4 h-4 text-violet-500" />, label: 'Document', sub: 'Any file up to 10MB', bg: 'bg-violet-100 dark:bg-violet-900/40' },
+                        { icon: <ImageIcon className="w-4 h-4 text-sky-500" />, label: 'Image', sub: 'PNG, JPG up to 10MB', bg: 'bg-sky-100 dark:bg-sky-900/40', ref: 'image' },
+                        { icon: <FileText className="w-4 h-4 text-violet-500" />, label: 'Document', sub: 'PDF, DOCX, PPT up to 10MB', bg: 'bg-violet-100 dark:bg-violet-900/40', ref: 'doc' },
                       ].map((item) => (
-                        <button key={item.label} onClick={() => fileInputRef.current?.click()}
-                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-accent transition-colors text-left">
-                          <div className={`w-8 h-8 rounded-lg ${item.bg} flex items-center justify-center shrink-0`}>{item.icon}</div>
+                        <button key={item.label} onClick={() => {
+                          if (item.ref === 'image') fileInputRef.current?.click();
+                          else docInputRef.current?.click();
+                          setShowAttachMenu(false);
+                        }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-accent transition-colors text-left">
+                          <div className={`w-9 h-9 rounded-xl ${item.bg} flex items-center justify-center shrink-0`}>{item.icon}</div>
                           <div>
-                            <p className="text-xs font-medium">{item.label}</p>
+                            <p className="text-xs font-semibold">{item.label}</p>
                             <p className="text-[10px] text-muted-foreground">{item.sub}</p>
                           </div>
                         </button>
@@ -818,52 +1002,73 @@ export function ChatView() {
                 )}
               </AnimatePresence>
               <input ref={fileInputRef} type="file" className="hidden"
-                accept="image/*,.pdf,.doc,.docx,.txt,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleFileSelect} />
+                accept="image/*" multiple onChange={handleFileSelect} />
+              <input ref={docInputRef} type="file" className="hidden"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" multiple onChange={handleFileSelect} />
             </div>
 
             {/* Textarea */}
-            <div className="flex-1 relative">
-              <Textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown} onPaste={handlePaste}
-                placeholder={isRecording ? 'Listening...' : 'Ask me anything about your studies...'}
-                className="min-h-[40px] max-h-[140px] resize-none text-sm rounded-xl border-primary/20 focus:border-primary/40 shadow-sm leading-relaxed"
-                rows={1} disabled={isRecording} />
-            </div>
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder={isRecording ? 'Listening…' : 'Ask me anything about your studies…'}
+              className="flex-1 min-h-[36px] max-h-[140px] resize-none text-sm !border-0 !shadow-none !ring-0 !outline-none focus-visible:!ring-0 focus-visible:!border-0 bg-transparent leading-relaxed py-1.5 px-1"
+              rows={1}
+              disabled={isRecording}
+            />
 
-            {/* Voice / Stop / Send */}
-            {isLoading ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10" onClick={stopGeneration}>
-                    <StopCircle className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Stop</TooltipContent>
-              </Tooltip>
-            ) : isRecording ? (
-              <Button variant="destructive" size="icon" className="h-9 w-9 rounded-xl shrink-0 animate-pulse" onMouseDown={stopRecording}>
-                <MicOff className="w-4 h-4" />
-              </Button>
-            ) : (
-              <>
+            {/* Right action buttons */}
+            <div className="flex items-center gap-1 shrink-0">
+              {isLoading ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl shrink-0 text-muted-foreground hover:bg-accent"
-                      onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={() => { if (isRecording) stopRecording(); }}>
-                      <Mic className="w-4 h-4" />
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-8 w-8 rounded-xl text-destructive hover:bg-destructive/10"
+                      onClick={stopGeneration}
+                    >
+                      <StopCircle className="w-4 h-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Hold to record</TooltipContent>
+                  <TooltipContent>Stop generating</TooltipContent>
                 </Tooltip>
-                <Button onClick={sendMessage} disabled={!canSend} size="icon"
-                  className="h-9 w-9 rounded-xl shrink-0 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-sm shadow-emerald-500/20 disabled:opacity-40 transition-all">
-                  <ArrowUp className="w-4 h-4" />
+              ) : isRecording ? (
+                <Button variant="destructive" size="icon" className="h-8 w-8 rounded-xl animate-pulse" onMouseDown={stopRecording}>
+                  <MicOff className="w-4 h-4" />
                 </Button>
-              </>
-            )}
+              ) : (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost" size="icon"
+                        className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent"
+                        onMouseDown={startRecording}
+                        onMouseUp={stopRecording}
+                        onMouseLeave={() => { if (isRecording) stopRecording(); }}
+                      >
+                        <Mic className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Hold to record</TooltipContent>
+                  </Tooltip>
+                  <Button
+                    onClick={sendMessage}
+                    disabled={!canSend}
+                    size="icon"
+                    className="h-8 w-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-sm shadow-emerald-500/30 disabled:opacity-30 transition-all"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
-          <p className="text-[10px] text-muted-foreground/40 mt-1.5 text-center">
+          <p className="text-[10px] text-muted-foreground/35 mt-2 text-center">
             FSK EDU AI can make mistakes. Verify important information.
           </p>
         </div>

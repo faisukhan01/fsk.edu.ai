@@ -487,39 +487,80 @@ function MainApp({ onSignOut, userName }: { onSignOut: () => void; userName: str
 }
 
 export default function Home() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('fsk-edu-auth') === 'true';
-    }
-    return false;
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
-  const [userName, setUserName] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('fsk-edu-username') || '';
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+
+  // Validate session with the server on mount
+  useEffect(() => {
+    // Check for Google OAuth error in URL
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('error');
+    if (err) {
+      const messages: Record<string, string> = {
+        google_denied: 'Google sign-in was cancelled.',
+        google_token_failed: 'Google sign-in failed. Please try again.',
+        google_userinfo_failed: 'Could not retrieve your Google account info.',
+        google_no_email: 'Your Google account has no email address.',
+        google_auth_failed: 'Google sign-in failed. Please try again.',
+      };
+      setGoogleError(messages[err] || 'Sign-in failed. Please try again.');
+      // Clean the URL
+      window.history.replaceState({}, '', '/');
     }
-    return '';
-  });
+
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.user) {
+          setUserName(data.user.name || '');
+          setUserEmail(data.user.email || '');
+          setIsAuthenticated(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsCheckingAuth(false));
+  }, []);
 
   const handleAuthSuccess = useCallback((name?: string) => {
-    localStorage.setItem('fsk-edu-auth', 'true');
-    if (name) {
-      localStorage.setItem('fsk-edu-username', name);
-      setUserName(name);
-    } else {
-      // On login, name was already stored during signup
-      const stored = localStorage.getItem('fsk-edu-username') || '';
-      setUserName(stored);
-    }
+    if (name) setUserName(name);
     setIsAuthenticated(true);
+    // Re-fetch user info to get email too
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.user) {
+          setUserName(data.user.name || name || '');
+          setUserEmail(data.user.email || '');
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  const handleSignOut = useCallback(() => {
+  const handleSignOut = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
     setIsAuthenticated(false);
+    setUserName('');
+    setUserEmail('');
   }, []);
+
+  // Show nothing while checking auth (avoids flash of login page)
+  if (isCheckingAuth) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <img src="/fsk-logo.png" alt="FSK EDU AI" className="w-16 h-16 object-contain animate-pulse" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
-    return <AnimatedLoginPage onSuccess={handleAuthSuccess} />;
+    return <AnimatedLoginPage onSuccess={handleAuthSuccess} googleError={googleError} />;
   }
 
   return <MainApp onSignOut={handleSignOut} userName={userName} />;

@@ -120,7 +120,7 @@ export function DashboardView({ userName }: { userName?: string }) {
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl p-6 md:p-8 text-white gradient-mesh"
+        className="relative overflow-hidden rounded-2xl p-4 sm:p-6 md:p-8 text-white gradient-mesh"
         style={{
           background: 'linear-gradient(135deg, #047857 0%, #059669 25%, #0d9488 50%, #0f766e 75%, #047857 100%)',
           backgroundSize: '200% 200%',
@@ -134,30 +134,31 @@ export function DashboardView({ userName }: { userName?: string }) {
         <div className="absolute bottom-4 right-8 w-16 h-16 bg-white/[0.05] rounded-full" />
         <div className="absolute top-4 left-8 w-24 h-24 bg-white/[0.04] rounded-full" />
 
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <motion.div
               animate={{ scale: [1, 1.05, 1] }}
               transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-              className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-lg shadow-black/10"
+              className="w-11 h-11 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl sm:text-3xl shadow-lg shadow-black/10 shrink-0"
             >
               {getTimeEmoji()}
             </motion.div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-balance">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-2xl md:text-3xl font-bold tracking-tight leading-snug text-balance">
                 {getGreeting()}, <span className="greeting-name-text">{userName || 'Student'}</span>!
               </h1>
-              <p className="text-emerald-100 text-sm md:text-base mt-1">
-                Ready to learn something new today? Your AI companion is here to help.
+              <p className="text-emerald-100 text-xs sm:text-sm md:text-base mt-0.5 sm:mt-1 opacity-90">
+                <span className="hidden sm:inline">Ready to learn something new today? Your AI companion is here to help.</span>
+                <span className="sm:hidden">Your AI study companion is ready.</span>
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Badge
               variant="secondary"
-              className="bg-white/20 text-white border-0 text-sm px-3 py-1.5 backdrop-blur-sm"
+              className="bg-white/20 text-white border-0 text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 backdrop-blur-sm"
             >
-              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+              <Sparkles className="w-3 sm:w-3.5 h-3 sm:h-3.5 mr-1 sm:mr-1.5" />
               Powered by AI
             </Badge>
           </div>
@@ -242,7 +243,7 @@ export function DashboardView({ userName }: { userName?: string }) {
               {/* Subtle tinted background */}
               <div className="absolute inset-0 opacity-100 transition-opacity duration-300" style={{ background: `radial-gradient(ellipse at top left, ${stat.accentLight} 0%, transparent 70%)` }} />
 
-              <div className="relative p-4 flex flex-col gap-3">
+              <div className="relative p-3 sm:p-4 flex flex-col gap-2 sm:gap-3">
                 {/* Top row: icon + label */}
                 <div className="flex items-center justify-between">
                   <div className={`w-9 h-9 rounded-xl ${stat.iconBg} flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300`}>
@@ -263,7 +264,7 @@ export function DashboardView({ userName }: { userName?: string }) {
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.25 + i * 0.07, type: 'spring' }}
-                      className={`text-2xl font-bold tracking-tight leading-none ${stat.isEmpty ? 'text-muted-foreground/50' : stat.valueColor}`}
+                      className={`text-xl sm:text-2xl font-bold tracking-tight leading-none ${stat.isEmpty ? 'text-muted-foreground/50' : stat.valueColor}`}
                     >
                       {stat.value}
                     </motion.p>

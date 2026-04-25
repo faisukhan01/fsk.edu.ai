@@ -11,12 +11,29 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  password  String   @default("")
+  googleId  String?  @unique
+  avatar    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  chatSessions   ChatSession[]
+  notes          Note[]
+  flashcardDecks FlashcardDeck[]
+  studySessions  StudySession[]
+  quizzes        Quiz[]
+  courses        Course[]
+  studyGoals     StudyGoal[]
+  summaries      Summary[]
+  solvedProblems SolvedProblem[]
+  moodEntries    MoodEntry[]
+  achievements   Achievement[]
 }
 
 model ChatSession {
   id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String   @default("New Chat")
   courseId  String?
   messages  ChatMessage[]
@@ -35,6 +52,8 @@ model ChatMessage {
 
 model Note {
   id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   content   String
   courseId  String?
@@ -46,6 +65,8 @@ model Note {
 
 model FlashcardDeck {
   id       String     @id @default(cuid())
+  userId   String
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   title    String
   courseId String?
   cards    Flashcard[]
@@ -65,6 +86,8 @@ model Flashcard {
 
 model StudySession {
   id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      String   // "pomodoro" | "free"
   duration  Int      // in minutes
   courseId  String?
@@ -74,6 +97,8 @@ model StudySession {
 
 model Quiz {
   id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   courseId  String?
   questions QuizQuestion[]
@@ -95,8 +120,10 @@ model QuizQuestion {
 
 model Course {
   id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
-  code      String   @unique
+  code      String
   color     String   @default("#10b981")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -104,6 +131,8 @@ model Course {
 
 model StudyGoal {
   id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title       String
   description String?
   targetMinutes Int
@@ -116,6 +145,8 @@ model StudyGoal {
 
 model Summary {
   id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   originalText String
   summary     String
   style       String   @default("brief")
@@ -125,6 +156,8 @@ model Summary {
 
 model SolvedProblem {
   id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   question  String
   solution  String
   type      String   @default("math")
@@ -133,6 +166,8 @@ model SolvedProblem {
 
 model MoodEntry {
   id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   mood         String
   note         String?
   studyMinutes Int      @default(0)
@@ -141,11 +176,15 @@ model MoodEntry {
 
 model Achievement {
   id          String    @id @default(cuid())
-  key         String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String
   title       String
   description String
   icon        String    @default("🏆")
   category    String    @default("general")
   unlockedAt  DateTime?
   createdAt   DateTime  @default(now())
+
+  @@unique([userId, key])
 }

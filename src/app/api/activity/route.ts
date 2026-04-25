@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getSessionFromRequest } from '@/lib/auth';
 
 interface Activity {
   id: string;
@@ -26,38 +27,26 @@ function timeAgo(date: Date): string {
   if (diffDay < 7) return `${diffDay} days ago`;
   if (diffWeek === 1) return '1 week ago';
   if (diffWeek < 4) return `${diffWeek} weeks ago`;
-  // Fall back to date string for older items
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
+    const uid = session.userId;
+
     const [sessions, quizzes, notes, decks, goals] = await Promise.all([
-      db.studySession.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
-      db.quiz.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
-      db.note.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
-      db.flashcardDeck.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
-      db.studyGoal.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
+      db.studySession.findMany({ where: { userId: uid }, orderBy: { createdAt: 'desc' }, take: 20 }),
+      db.quiz.findMany({ where: { userId: uid }, orderBy: { createdAt: 'desc' }, take: 20 }),
+      db.note.findMany({ where: { userId: uid }, orderBy: { createdAt: 'desc' }, take: 20 }),
+      db.flashcardDeck.findMany({ where: { userId: uid }, orderBy: { createdAt: 'desc' }, take: 20 }),
+      db.studyGoal.findMany({ where: { userId: uid }, orderBy: { createdAt: 'desc' }, take: 20 }),
     ]);
 
     const activities: Activity[] = [];
 
-    // Study sessions
     for (const s of sessions) {
       if (!s.completed) continue;
       const typeLabel = s.type === 'pomodoro' ? 'Pomodoro' : 'Free Study';
@@ -71,7 +60,6 @@ export async function GET() {
       });
     }
 
-    // Quizzes
     for (const q of quizzes) {
       let subtitle = 'Created';
       if (q.score !== null && q.totalQuestions > 0) {
@@ -88,10 +76,8 @@ export async function GET() {
       });
     }
 
-    // Notes — distinguish created vs updated
     for (const n of notes) {
-      const wasUpdated =
-        n.updatedAt.getTime() - n.createdAt.getTime() > 1000; // more than 1s diff
+      const wasUpdated = n.updatedAt.getTime() - n.createdAt.getTime() > 1000;
       activities.push({
         id: `note-${n.id}`,
         type: 'note',
@@ -102,7 +88,6 @@ export async function GET() {
       });
     }
 
-    // Flashcard decks
     for (const d of decks) {
       activities.push({
         id: `flashcard-${d.id}`,
@@ -114,7 +99,6 @@ export async function GET() {
       });
     }
 
-    // Study goals
     for (const g of goals) {
       activities.push({
         id: `goal-${g.id}`,
@@ -126,15 +110,10 @@ export async function GET() {
       });
     }
 
-    // Sort by time descending (most recent first)
     activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-
     return NextResponse.json({ activities });
   } catch (error) {
     console.error('Activity Feed API Error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch activity feed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch activity feed' }, { status: 500 });
   }
 }

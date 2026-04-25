@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
-
-const DATA_FILE = path.join(process.cwd(), 'db', 'achievements.json');
+import { db } from '@/lib/db';
+import { getSessionFromRequest } from '@/lib/auth';
 
 const DEFAULT_ACHIEVEMENTS = [
   { key: 'first_chat', title: 'First Conversation', description: 'Complete your first AI chat', icon: '💬', category: 'getting-started' },
@@ -17,49 +15,38 @@ const DEFAULT_ACHIEVEMENTS = [
   { key: 'solver', title: 'Problem Solver', description: 'Solve your first problem', icon: '🧮', category: 'knowledge' },
   { key: 'goal_setter', title: 'Goal Setter', description: 'Set your first study goal', icon: '🎯', category: 'study-focus' },
   { key: 'course_enrolled', title: 'Enrolled', description: 'Add your first course', icon: '🎓', category: 'getting-started' },
-  { key: 'explorer', title: 'Explorer', description: 'Try all features (visit each view at least once)', icon: '🗺️', category: 'getting-started' },
+  { key: 'explorer', title: 'Explorer', description: 'Try all features', icon: '🗺️', category: 'getting-started' },
   { key: 'mood_logger', title: 'Self-Aware', description: 'Log 5 mood entries', icon: '😊', category: 'consistency' },
 ];
 
-interface Achievement {
-  id: string;
-  key: string;
-  title: string;
-  description: string;
-  icon: string;
-  category: string;
-  unlockedAt: string | null;
-}
+async function ensureUserAchievements(userId: string) {
+  const existing = await db.achievement.findMany({ where: { userId } });
+  const existingKeys = new Set(existing.map(a => a.key));
 
-async function ensureDataFile(): Promise<Achievement[]> {
-  try {
-    const data = await fs.readFile(DATA_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    // Initialize with defaults
-    const initial = DEFAULT_ACHIEVEMENTS.map((a, i) => ({
-      id: `ach_${i}`,
-      key: a.key,
-      title: a.title,
-      description: a.description,
-      icon: a.icon,
-      category: a.category,
-      unlockedAt: null,
-    }));
-    await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-    await fs.writeFile(DATA_FILE, JSON.stringify(initial, null, 2));
-    return initial;
+  const missing = DEFAULT_ACHIEVEMENTS.filter(a => !existingKeys.has(a.key));
+  if (missing.length > 0) {
+    await db.achievement.createMany({
+      data: missing.map(a => ({
+        userId,
+        key: a.key,
+        title: a.title,
+        description: a.description,
+        icon: a.icon,
+        category: a.category,
+        unlockedAt: null,
+      })),
+    });
   }
+
+  return db.achievement.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
 }
 
-async function saveData(data: Achievement[]): Promise<void> {
-  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
-}
+export async function GET(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-export async function GET() {
   try {
-    const achievements = await ensureDataFile();
+    const achievements = await ensureUserAchievements(session.userId);
     return NextResponse.json({ achievements });
   } catch (error) {
     console.error('Achievements GET error:', error);
@@ -67,90 +54,81 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
-    const body = await request.json();
+    const body = await req.json();
     const { key, action } = body as { key?: string; action?: string };
 
     if (action === 'check-progress') {
-      return handleCheckProgress();
+      return handleCheckProgress(session.userId);
     }
 
     if (!key) {
       return NextResponse.json({ error: 'Achievement key is required' }, { status: 400 });
     }
 
-    const achievements = await ensureDataFile();
-    const idx = achievements.findIndex((a) => a.key === key);
+    const achievements = await ensureUserAchievements(session.userId);
+    const achievement = achievements.find(a => a.key === key);
 
-    if (idx === -1) {
+    if (!achievement) {
       return NextResponse.json({ error: 'Achievement not found' }, { status: 404 });
     }
 
-    if (achievements[idx].unlockedAt) {
-      return NextResponse.json({ achievement: achievements[idx], message: 'Already unlocked', alreadyUnlocked: true });
+    if (achievement.unlockedAt) {
+      return NextResponse.json({ achievement, message: 'Already unlocked', alreadyUnlocked: true });
     }
 
-    achievements[idx].unlockedAt = new Date().toISOString();
-    await saveData(achievements);
+    const updated = await db.achievement.update({
+      where: { id: achievement.id },
+      data: { unlockedAt: new Date() },
+    });
 
-    return NextResponse.json({ achievement: achievements[idx], message: 'Achievement unlocked!', newlyUnlocked: true });
+    return NextResponse.json({ achievement: updated, message: 'Achievement unlocked!', newlyUnlocked: true });
   } catch (error) {
     console.error('Achievements POST error:', error);
     return NextResponse.json({ error: 'Failed to process achievement' }, { status: 500 });
   }
 }
 
-async function handleCheckProgress() {
+async function handleCheckProgress(userId: string) {
   try {
+    const achievements = await ensureUserAchievements(userId);
     const newlyUnlocked: string[] = [];
-    const achievements = await ensureDataFile();
 
-    // Gather stats from existing API endpoints
-    let chatSessions = 0, quizzes = 0, decks = 0, notes = 0, sessions = 0;
-    let summaries = 0, problems = 0, goals = 0, courses = 0, moods = 0;
+    const [quizzes, decks, notes, sessions, summaries, problems, goals, courses, moods, streak] = await Promise.all([
+      db.quiz.count({ where: { userId } }),
+      db.flashcardDeck.count({ where: { userId } }),
+      db.note.count({ where: { userId } }),
+      db.studySession.count({ where: { userId, completed: true } }),
+      db.summary.count({ where: { userId } }),
+      db.solvedProblem.count({ where: { userId } }),
+      db.studyGoal.count({ where: { userId } }),
+      db.course.count({ where: { userId } }),
+      db.moodEntry.count({ where: { userId } }),
+      // Calculate current streak
+      db.studySession.findMany({ where: { userId, completed: true }, select: { createdAt: true }, orderBy: { createdAt: 'asc' } }),
+    ]);
 
-    try {
-      const [cs, q, d, n, ss, su, p, g, c, m] = await Promise.all([
-        fetch('http://localhost:3000/api/study-sessions').then(r => r.json()).catch(() => ({})),
-        fetch('http://localhost:3000/api/quiz').then(r => r.json()).catch(() => ({ quizzes: [] })),
-        fetch('http://localhost:3000/api/flashcards').then(r => r.json()).catch(() => ({ decks: [] })),
-        fetch('http://localhost:3000/api/notes').then(r => r.json()).catch(() => ({ notes: [] })),
-        fetch('http://localhost:3000/api/statistics').then(r => r.json()).catch(() => ({})),
-        fetch('http://localhost:3000/api/summaries').then(r => r.json()).catch(() => ({ summaries: [] })),
-        fetch('http://localhost:3000/api/solved').then(r => r.json()).catch(() => ({ problems: [] })),
-        fetch('http://localhost:3000/api/goals').then(r => r.json()).catch(() => ({ goals: [] })),
-        fetch('http://localhost:3000/api/courses').then(r => r.json()).catch(() => ({ courses: [] })),
-        fetch('http://localhost:3000/api/mood').then(r => r.json()).catch(() => ({ moods: [] })),
-      ]);
-      chatSessions = cs.totalSessions || Array.isArray(cs.sessions) ? cs.sessions.length : 0;
-      quizzes = Array.isArray(q.quizzes) ? q.quizzes.length : (q.totalQuizzes || 0);
-      decks = Array.isArray(d.decks) ? d.decks.length : (d.totalFlashcardDecks || 0);
-      notes = Array.isArray(n.notes) ? n.notes.length : (n.totalNotes || 0);
-      sessions = cs.totalSessions || 0;
-      summaries = Array.isArray(su.summaries) ? su.summaries.length : (su.totalSummaries || 0);
-      problems = Array.isArray(p.problems) ? p.problems.length : (p.totalSolved || 0);
-      goals = Array.isArray(g.goals) ? g.goals.length : (g.totalGoals || 0);
-      courses = Array.isArray(c.courses) ? c.courses.length : (c.totalCourses || 0);
-      moods = Array.isArray(m.moods) ? m.moods.length : (m.totalMoods || 0);
-    } catch (e) {
-      console.error('Failed to gather stats:', e);
+    // Calculate streak from sessions
+    const toDateString = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const allDatesSet = new Set(streak.map(s => toDateString(new Date(s.createdAt))));
+    let currentStreak = 0;
+    const checkDate = new Date();
+    while (allDatesSet.has(toDateString(checkDate))) {
+      currentStreak++;
+      checkDate.setDate(checkDate.getDate() - 1);
     }
 
-    // Simple streak calculation from study sessions
-    let streak = 0;
-    try {
-      const streakResp = await fetch('http://localhost:3000/api/streak').then(r => r.json()).catch(() => ({}));
-      streak = streakResp.longestStreak || streakResp.currentStreak || 0;
-    } catch {}
-
     const conditions: Record<string, boolean> = {
-      first_chat: chatSessions >= 1,
+      first_chat: sessions >= 1,
       quiz_master: quizzes >= 3,
       flashcard_creator: decks >= 3,
       note_taker: notes >= 5,
-      streak_3: streak >= 3,
-      streak_7: streak >= 7,
+      streak_3: currentStreak >= 3,
+      streak_7: currentStreak >= 7,
       focus_5: sessions >= 5,
       focus_25: sessions >= 25,
       summarizer: summaries >= 1,
@@ -162,17 +140,16 @@ async function handleCheckProgress() {
 
     for (const [key, met] of Object.entries(conditions)) {
       if (met) {
-        const idx = achievements.findIndex((a) => a.key === key);
-        if (idx !== -1 && !achievements[idx].unlockedAt) {
-          achievements[idx].unlockedAt = new Date().toISOString();
+        const ach = achievements.find(a => a.key === key);
+        if (ach && !ach.unlockedAt) {
+          await db.achievement.update({ where: { id: ach.id }, data: { unlockedAt: new Date() } });
           newlyUnlocked.push(key);
         }
       }
     }
 
-    await saveData(achievements);
-
-    return NextResponse.json({ achievements, newlyUnlocked });
+    const updated = await db.achievement.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
+    return NextResponse.json({ achievements: updated, newlyUnlocked });
   } catch (error) {
     console.error('Check progress error:', error);
     return NextResponse.json({ error: 'Failed to check progress' }, { status: 500 });

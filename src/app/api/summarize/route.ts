@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from '@/lib/ai';
 import { db } from '@/lib/db';
+import { getSessionFromRequest } from '@/lib/auth';
 
 const SYSTEM_PROMPT = `You are an expert academic summarizer for university students. Summarize the following text in a clear, structured way. Your goal is to help students quickly understand the key concepts and main ideas from their study materials. Always be accurate and preserve the most important information.`;
 
@@ -12,18 +13,17 @@ const STYLE_INSTRUCTIONS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const { text, style = 'brief' } = await req.json();
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
-
     if (text.trim().length < 20) {
-      return NextResponse.json(
-        { error: 'Please provide at least 20 characters of text to summarize.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Please provide at least 20 characters of text to summarize.' }, { status: 400 });
     }
 
     const validStyles = ['brief', 'detailed', 'bullet-points', 'eli5'];
@@ -31,7 +31,6 @@ export async function POST(req: NextRequest) {
     const styleInstruction = STYLE_INSTRUCTIONS[selectedStyle];
 
     const prompt = `${SYSTEM_PROMPT}\n\nSummarize the following text using the "${selectedStyle}" style:\n\n${styleInstruction}\n\n---\n\n${text}`;
-
     const summary = await generateText(prompt);
 
     if (!summary) {
@@ -41,9 +40,9 @@ export async function POST(req: NextRequest) {
     const originalWordCount = text.trim().split(/\s+/).length;
     const summaryWordCount = summary.trim().split(/\s+/).length;
 
-    // Save to database
     const saved = await db.summary.create({
       data: {
+        userId: session.userId,
         originalText: text.trim(),
         summary,
         style: selectedStyle,

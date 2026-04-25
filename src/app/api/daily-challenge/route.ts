@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateJSON } from '@/lib/ai';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { getSessionFromRequest } from '@/lib/auth';
 
 const CHALLENGE_FILE = path.join(process.cwd(), 'db', 'daily-challenge.json');
+const USER_ANSWERS_DIR = path.join(process.cwd(), 'db', 'daily-answers');
 
 interface DailyChallenge {
   date: string;
@@ -13,10 +15,7 @@ interface DailyChallenge {
   explanation: string;
   subject: string;
   difficulty: string;
-  stats: {
-    attempted: number;
-    correct: number;
-  };
+  stats: { attempted: number; correct: number };
 }
 
 interface ChallengeJSON {
@@ -26,6 +25,12 @@ interface ChallengeJSON {
   explanation: string;
   subject: string;
   difficulty: string;
+}
+
+interface UserAnswer {
+  date: string;
+  selectedIndex: number;
+  correct: boolean;
 }
 
 const SUBJECTS = ['Math', 'Physics', 'CS', 'Chemistry', 'Biology', 'History', 'Literature', 'Economics'];
@@ -39,17 +44,28 @@ async function loadChallenge(): Promise<DailyChallenge | null> {
   try {
     const data = await fs.readFile(CHALLENGE_FILE, 'utf-8');
     const challenge: DailyChallenge = JSON.parse(data);
-    if (challenge.date === getTodayStr()) {
-      return challenge;
-    }
-  } catch {
-    // File doesn't exist or invalid
-  }
+    if (challenge.date === getTodayStr()) return challenge;
+  } catch {}
   return null;
 }
 
 async function saveChallenge(challenge: DailyChallenge): Promise<void> {
   await fs.writeFile(CHALLENGE_FILE, JSON.stringify(challenge, null, 2), 'utf-8');
+}
+
+async function getUserAnswer(userId: string): Promise<UserAnswer | null> {
+  try {
+    await fs.mkdir(USER_ANSWERS_DIR, { recursive: true });
+    const data = await fs.readFile(path.join(USER_ANSWERS_DIR, `${userId}.json`), 'utf-8');
+    const answer: UserAnswer = JSON.parse(data);
+    if (answer.date === getTodayStr()) return answer;
+  } catch {}
+  return null;
+}
+
+async function saveUserAnswer(userId: string, answer: UserAnswer): Promise<void> {
+  await fs.mkdir(USER_ANSWERS_DIR, { recursive: true });
+  await fs.writeFile(path.join(USER_ANSWERS_DIR, `${userId}.json`), JSON.stringify(answer, null, 2));
 }
 
 async function generateChallenge(): Promise<DailyChallenge> {
@@ -70,7 +86,7 @@ Return ONLY valid JSON:
   "difficulty": "${difficulty}"
 }
 
-The correctIndex must be 0, 1, 2, or 3 (pointing to the correct answer in the options array). Make the question educational but engaging.`;
+The correctIndex must be 0, 1, 2, or 3. Make the question educational but engaging.`;
 
   const parsed = await generateJSON<ChallengeJSON>(prompt, systemInstruction);
 
@@ -86,16 +102,19 @@ The correctIndex must be 0, 1, 2, or 3 (pointing to the correct answer in the op
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     let challenge = await loadChallenge();
-
     if (!challenge) {
       challenge = await generateChallenge();
       await saveChallenge(challenge);
     }
 
-    // Return challenge without revealing the correct answer
+    const userAnswer = await getUserAnswer(session.userId);
+
     return NextResponse.json({
       date: challenge.date,
       question: challenge.question,
@@ -103,7 +122,14 @@ export async function GET() {
       subject: challenge.subject,
       difficulty: challenge.difficulty,
       stats: challenge.stats,
-      answered: challenge.stats.attempted > 0,
+      answered: !!userAnswer,
+      // If already answered, reveal the result
+      ...(userAnswer ? {
+        correctIndex: challenge.correctIndex,
+        explanation: challenge.explanation,
+        userSelectedIndex: userAnswer.selectedIndex,
+        wasCorrect: userAnswer.correct,
+      } : {}),
     });
   } catch (error) {
     console.error('Daily Challenge API Error:', error);
@@ -112,6 +138,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const { action, selectedIndex } = await req.json();
 
@@ -134,14 +163,26 @@ export async function POST(req: NextRequest) {
     }
 
     const challenge = await loadChallenge();
-    if (!challenge) {
-      return NextResponse.json({ error: 'No challenge available' }, { status: 404 });
+    if (!challenge) return NextResponse.json({ error: 'No challenge available' }, { status: 404 });
+
+    // Check if user already answered today
+    const existingAnswer = await getUserAnswer(session.userId);
+    if (existingAnswer) {
+      return NextResponse.json({
+        correct: existingAnswer.correct,
+        correctIndex: challenge.correctIndex,
+        explanation: challenge.explanation,
+        stats: challenge.stats,
+        alreadyAnswered: true,
+      });
     }
 
     const correct = selectedIndex === challenge.correctIndex;
     challenge.stats.attempted += 1;
     if (correct) challenge.stats.correct += 1;
     await saveChallenge(challenge);
+
+    await saveUserAnswer(session.userId, { date: getTodayStr(), selectedIndex, correct });
 
     return NextResponse.json({
       correct,

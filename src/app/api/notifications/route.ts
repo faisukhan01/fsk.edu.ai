@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { getSessionFromRequest } from '@/lib/auth';
 
-const DB_PATH = path.join(process.cwd(), 'db', 'notifications.json');
+const DB_DIR = path.join(process.cwd(), 'db', 'notifications');
 
 interface Notification {
   id: string;
@@ -13,25 +14,30 @@ interface Notification {
   createdAt: string;
 }
 
-async function readDB(): Promise<Notification[]> {
+function getUserDBPath(userId: string): string {
+  return path.join(DB_DIR, `${userId}.json`);
+}
+
+async function readDB(userId: string): Promise<Notification[]> {
   try {
-    const data = await fs.readFile(DB_PATH, 'utf-8');
+    const data = await fs.readFile(getUserDBPath(userId), 'utf-8');
     return JSON.parse(data);
   } catch {
     return [];
   }
 }
 
-async function writeDB(data: Notification[]): Promise<void> {
-  const dir = path.dirname(DB_PATH);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2));
+async function writeDB(userId: string, data: Notification[]): Promise<void> {
+  await fs.mkdir(DB_DIR, { recursive: true });
+  await fs.writeFile(getUserDBPath(userId), JSON.stringify(data, null, 2));
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
-    const notifications = await readDB();
-    // Return newest first
+    const notifications = await readDB(session.userId);
     const sorted = [...notifications].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -43,6 +49,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const body = await request.json();
     const { title, description, type, read } = body as {
@@ -53,10 +62,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (!title || !description || !type) {
-      return NextResponse.json(
-        { error: 'Title, description, and type are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Title, description, and type are required' }, { status: 400 });
     }
 
     const validTypes = ['goal', 'achievement', 'reminder', 'info'];
@@ -73,9 +79,9 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    const notifications = await readDB();
+    const notifications = await readDB(session.userId);
     notifications.push(notification);
-    await writeDB(notifications);
+    await writeDB(session.userId, notifications);
 
     return NextResponse.json({ notification }, { status: 201 });
   } catch (error) {
@@ -85,37 +91,31 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const body = await request.json();
     const { id, markAllRead } = body as { id?: string; markAllRead?: boolean };
 
-    const notifications = await readDB();
+    const notifications = await readDB(session.userId);
 
     if (markAllRead) {
-      // Mark all as read
       let changed = 0;
       for (const n of notifications) {
-        if (!n.read) {
-          n.read = true;
-          changed++;
-        }
+        if (!n.read) { n.read = true; changed++; }
       }
-      await writeDB(notifications);
+      await writeDB(session.userId, notifications);
       return NextResponse.json({ success: true, changed });
     }
 
-    if (!id) {
-      return NextResponse.json({ error: 'Notification id is required' }, { status: 400 });
-    }
+    if (!id) return NextResponse.json({ error: 'Notification id is required' }, { status: 400 });
 
-    const idx = notifications.findIndex((n) => n.id === id);
-    if (idx === -1) {
-      return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
-    }
+    const idx = notifications.findIndex(n => n.id === id);
+    if (idx === -1) return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
 
     notifications[idx].read = true;
-    await writeDB(notifications);
-
+    await writeDB(session.userId, notifications);
     return NextResponse.json({ notification: notifications[idx] });
   } catch (error) {
     console.error('Notifications PATCH error:', error);
@@ -124,27 +124,27 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const body = await request.json();
     const { id, clearAll } = body as { id?: string; clearAll?: boolean };
 
-    const notifications = await readDB();
-
     if (clearAll) {
-      await writeDB([]);
+      await writeDB(session.userId, []);
       return NextResponse.json({ success: true });
     }
 
-    if (!id) {
-      return NextResponse.json({ error: 'Notification id is required' }, { status: 400 });
-    }
+    if (!id) return NextResponse.json({ error: 'Notification id is required' }, { status: 400 });
 
-    const filtered = notifications.filter((n) => n.id !== id);
+    const notifications = await readDB(session.userId);
+    const filtered = notifications.filter(n => n.id !== id);
     if (filtered.length === notifications.length) {
       return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
     }
 
-    await writeDB(filtered);
+    await writeDB(session.userId, filtered);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Notifications DELETE error:', error);

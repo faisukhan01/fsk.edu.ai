@@ -577,7 +577,7 @@ function LoginForm({ onToggle, onSuccess }: LoginFormProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
@@ -595,12 +595,32 @@ function LoginForm({ onToggle, onSuccess }: LoginFormProps) {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Map error message to the right field
+        const msg: string = data.error || 'Login failed';
+        if (msg.toLowerCase().includes('email') || msg.toLowerCase().includes('account')) {
+          setErrors({ email: msg });
+        } else {
+          setErrors({ password: msg });
+        }
+        return;
+      }
+
+      // Success — session cookie is set by the server
+      if (onSuccess) onSuccess(data.user?.name || undefined);
+    } catch {
+      setErrors({ password: 'Network error. Please try again.' });
+    } finally {
       setIsLoading(false);
-      // On login, retrieve the stored name (set during signup)
-      const storedName = localStorage.getItem('fsk-edu-username') || undefined;
-      if (onSuccess) onSuccess(storedName);
-    }, 1500);
+    }
   };
 
   return (
@@ -627,7 +647,7 @@ function LoginForm({ onToggle, onSuccess }: LoginFormProps) {
               if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
             }}
             error={errors.email}
-            success={email && /\S+@\S+\.\S+/.test(email)}
+            success={!!(email && /\S+@\S+\.\S+/.test(email))}
             autoComplete="email"
           />
         </div>
@@ -686,7 +706,40 @@ function LoginForm({ onToggle, onSuccess }: LoginFormProps) {
         </div>
       </form>
 
-      <div className="mt-5 sm:mt-6 text-center slide-up slide-up-delay-5">
+      {/* ── Divider ── */}
+      <div className="flex items-center gap-3 mt-4 mb-3 slide-up slide-up-delay-5">
+        <div className="flex-1 h-px bg-gray-100" />
+        <span className="text-xs text-gray-400 font-medium">or</span>
+        <div className="flex-1 h-px bg-gray-100" />
+      </div>
+
+      {/* ── Google Sign In Button ── */}
+      <motion.a
+        href="/api/auth/google"
+        whileHover={{ scale: 1.015, boxShadow: '0 4px 24px 0 rgba(66,133,244,0.13)' }}
+        whileTap={{ scale: 0.97 }}
+        className="slide-up slide-up-delay-5 flex items-center justify-center gap-3 w-full h-11 rounded-xl border-2 border-gray-100 bg-white hover:border-blue-200 hover:bg-blue-50/40 transition-all duration-200 cursor-pointer group"
+      >
+        <svg width="20" height="20" viewBox="0 0 48 48" className="shrink-0">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          <path fill="none" d="M0 0h48v48H0z"/>
+        </svg>
+        <span className="text-sm font-semibold text-gray-600 group-hover:text-gray-800 transition-colors">
+          Continue with Google
+        </span>
+      </motion.a>
+
+      {/* ── Divider ── */}
+      <div className="flex items-center gap-3 mt-3 mb-3">
+        <div className="flex-1 h-px bg-gray-100" />
+        <span className="text-xs text-gray-300 font-medium">new here?</span>
+        <div className="flex-1 h-px bg-gray-100" />
+      </div>
+
+      <div className="text-center">
         <p className="text-xs sm:text-sm text-gray-400">
           Don&apos;t have an account?{' '}
           <button
@@ -694,7 +747,7 @@ function LoginForm({ onToggle, onSuccess }: LoginFormProps) {
             onClick={onToggle}
             className="text-emerald-600 hover:text-teal-600 font-semibold transition-colors"
           >
-            Sign Up
+            Create one free →
           </button>
         </p>
       </div>
@@ -743,7 +796,7 @@ function SignupForm({ onToggle, onSuccess }: SignupFormProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
@@ -760,15 +813,33 @@ function SignupForm({ onToggle, onSuccess }: SignupFormProps) {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      // Save the user's name to localStorage for personalization
-      const trimmedName = fullName.trim();
-      if (trimmedName) {
-        localStorage.setItem('fsk-edu-username', trimmedName);
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: fullName.trim(), email: email.trim(), password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        const msg: string = data.error || 'Signup failed';
+        if (msg.toLowerCase().includes('email') || msg.toLowerCase().includes('account')) {
+          setErrors({ email: msg });
+        } else if (msg.toLowerCase().includes('password')) {
+          setErrors({ password: msg });
+        } else {
+          setErrors({ email: msg });
+        }
+        return;
       }
-      onSuccess(trimmedName || undefined);
-    }, 1500);
+
+      // Success — session cookie is set by the server
+      onSuccess(data.user?.name || fullName.trim() || undefined);
+    } catch {
+      setErrors({ email: 'Network error. Please try again.' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -871,12 +942,38 @@ function SignupForm({ onToggle, onSuccess }: SignupFormProps) {
         </motion.button>
       </form>
 
+      {/* ── Divider ── */}
+      <div className="flex items-center gap-3 my-3">
+        <div className="flex-1 h-px bg-gray-100" />
+        <span className="text-xs text-gray-400 font-medium">or</span>
+        <div className="flex-1 h-px bg-gray-100" />
+      </div>
+
+      {/* ── Google Sign Up Button ── */}
+      <motion.a
+        href="/api/auth/google"
+        whileHover={{ scale: 1.015, boxShadow: '0 4px 24px 0 rgba(66,133,244,0.13)' }}
+        whileTap={{ scale: 0.97 }}
+        className="flex items-center justify-center gap-3 w-full h-11 rounded-xl border-2 border-gray-100 bg-white hover:border-blue-200 hover:bg-blue-50/40 transition-all duration-200 cursor-pointer group"
+      >
+        <svg width="18" height="18" viewBox="0 0 48 48" className="shrink-0">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          <path fill="none" d="M0 0h48v48H0z"/>
+        </svg>
+        <span className="text-sm font-semibold text-gray-600 group-hover:text-gray-800 transition-colors">
+          Continue with Google
+        </span>
+      </motion.a>
+
       {/* Already have an account */}
-      <div className="mt-3 text-center">
+      <div className="mt-4 pt-3 border-t border-gray-100 text-center">
         <p className="text-xs sm:text-sm text-gray-400">
           Already have an account?{' '}
           <button type="button" onClick={onToggle} className="text-emerald-600 hover:text-teal-600 font-semibold transition-colors">
-            Sign In
+            Sign In →
           </button>
         </p>
       </div>
@@ -888,9 +985,10 @@ function SignupForm({ onToggle, onSuccess }: SignupFormProps) {
 
 interface AnimatedLoginPageProps {
   onSuccess?: (name?: string) => void;
+  googleError?: string | null;
 }
 
-export default function AnimatedLoginPage({ onSuccess }: AnimatedLoginPageProps) {
+export default function AnimatedLoginPage({ onSuccess, googleError }: AnimatedLoginPageProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
   const handleToggle = useCallback(() => {
@@ -900,6 +998,20 @@ export default function AnimatedLoginPage({ onSuccess }: AnimatedLoginPageProps)
   return (
     <div className="login-bg flex items-center justify-center min-h-screen p-3 sm:p-4 md:p-6">
       <ParticleBackground />
+
+      {/* Google OAuth error banner */}
+      {googleError && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          {googleError}
+        </motion.div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 60 }}

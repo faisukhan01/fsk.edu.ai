@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateJSON, generateText } from '@/lib/ai';
 import { db } from '@/lib/db';
+import { getSessionFromRequest } from '@/lib/auth';
 
 interface DayPlan {
   day: string;
@@ -21,6 +22,9 @@ interface StudyPlan {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const { topic, duration, difficulty, preferences } = await req.json();
 
@@ -31,7 +35,7 @@ export async function POST(req: NextRequest) {
     // Get user's courses for context
     let coursesContext = '';
     try {
-      const courses = await db.course.findMany({ take: 10 });
+      const courses = await db.course.findMany({ where: { userId: session.userId }, take: 10 });
       if (courses.length > 0) {
         coursesContext = `\n\nStudent's enrolled courses: ${courses.map((c: { name: string; code: string }) => `${c.name} (${c.code})`).join(', ')}`;
       }

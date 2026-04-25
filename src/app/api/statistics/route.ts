@@ -1,8 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getSessionFromRequest } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
+    const uid = session.userId;
+
     const [
       totalNotes,
       totalDecks,
@@ -13,24 +19,20 @@ export async function GET() {
       masteredFlashcards,
       allSessions,
     ] = await Promise.all([
-      db.note.count(),
-      db.flashcardDeck.count(),
-      db.course.count(),
-      db.quiz.count(),
-      db.studySession.count({ where: { completed: true } }),
-      db.quiz.findMany({ where: { score: { not: null } } }),
-      db.flashcard.count({ where: { mastered: true } }),
-      db.studySession.findMany({ where: { completed: true } }),
+      db.note.count({ where: { userId: uid } }),
+      db.flashcardDeck.count({ where: { userId: uid } }),
+      db.course.count({ where: { userId: uid } }),
+      db.quiz.count({ where: { userId: uid } }),
+      db.studySession.count({ where: { userId: uid, completed: true } }),
+      db.quiz.findMany({ where: { userId: uid, score: { not: null } } }),
+      db.flashcard.count({ where: { deck: { userId: uid }, mastered: true } }),
+      db.studySession.findMany({ where: { userId: uid, completed: true } }),
     ]);
 
     const totalStudyMinutes = allSessions.reduce((acc, s) => acc + s.duration, 0);
-
     const avgQuizScore =
       quizzesWithScore.length > 0
-        ? Math.round(
-            quizzesWithScore.reduce((acc, q) => acc + (q.score ?? 0), 0) /
-              quizzesWithScore.length
-          )
+        ? Math.round(quizzesWithScore.reduce((acc, q) => acc + (q.score ?? 0), 0) / quizzesWithScore.length)
         : 0;
 
     return NextResponse.json({
@@ -46,9 +48,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Statistics API Error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch statistics' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch statistics' }, { status: 500 });
   }
 }
