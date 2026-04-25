@@ -1,0 +1,36 @@
+[
+  {
+    "id": "1776784544768-9sp90p",
+    "userId": "cmo8rmvyi000ivc1cnqbhs1zt",
+    "title": "hi",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      },
+      {
+        "role": "assistant",
+        "content": "### Welcome to Our Learning Space\nIt's wonderful to have you here. I'm excited to help you explore and understand various academic concepts. Whether you're working on a project, need help with a specific subject, or just want to learn something new, I'm here to support you.\n\nWhat's on your mind today? Are you looking for help with a particular topic or subject? Let's get started and make learning fun and engaging. \n\n### To Get Us Started, You Can:\n1. Ask a specific question about a subject or topic.\n2. Share what you're currently studying or working on.\n3. Explore a new area of interest and see where it takes us.\n\nI'm all ears and ready to help. Let's begin this learning journey together."
+      }
+    ],
+    "createdAt": "2026-04-21T15:15:44.768Z",
+    "updatedAt": "2026-04-21T15:15:46.383Z"
+  },
+  {
+    "id": "1776786074597-8528tp",
+    "userId": "cmo8rmvyi000ivc1cnqbhs1zt",
+    "title": "hi",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      },
+      {
+        "role": "assistant",
+        "content": "## Welcome to FSK EDU AI\nI'm excited to help you with any academic topic or question you may have. My goal is to provide clear, concise, and engaging explanations to help you understand complex concepts.\n\n### How Can I Assist You Today?\nAre you working on a specific assignment, studying for an exam, or exploring a new subject? Please feel free to share what's on your mind, and I'll do my best to support you.\n\n### Some Ways We Can Get Started:\n1. **Ask a question**: Share a question or topic you'd like to discuss.\n2. **Choose a subject**: Let me know which subject you're interested in (e.g., math, science, history, etc.).\n3. **Share a problem**: If you're stuck on a specific problem or assignment, I can help guide you through it.\n\nRemember, I'm here to help and support you in your academic journey. What's on your mind today?"
+      }
+    ],
+    "createdAt": "2026-04-21T15:41:14.597Z",
+    "updatedAt": "2026-04-21T15:41:15.956Z"
+  }
+]

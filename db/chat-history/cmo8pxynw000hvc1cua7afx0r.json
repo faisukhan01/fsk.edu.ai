@@ -1,0 +1,44 @@
+[
+  {
+    "id": "1776835225620-j9pqce",
+    "userId": "cmo8pxynw000hvc1cua7afx0r",
+    "title": "HI",
+    "messages": [
+      {
+        "role": "user",
+        "content": "HI"
+      },
+      {
+        "role": "assistant",
+        "content": "# Welcome to FSK EDU AI\nI'm excited to help you learn and explore new concepts. My goal is to make learning engaging, effective, and fun. I can assist you with a wide range of topics across various academic disciplines.\n\n## How Can I Help You Today?\nDo you have a specific subject or topic you'd like to discuss? Are you working on a project or assignment and need some guidance? Or perhaps you'd like to explore a new area of interest? Let me know, and I'll do my best to support you.\n\n### To Get Started, You Can:\n1. **Ask a question**: Share what's on your mind, and I'll do my best to provide a clear and concise answer.\n2. **Choose a topic**: Select a subject or area of interest, and I'll provide an introduction, examples, and explanations to help you get started.\n3. **Request help with a problem**: If you're struggling with a particular concept or assignment, I'll break it down step by step and provide guidance.\n\nWhat's your first step?"
+      },
+      {
+        "role": "user",
+        "content": "ucp johar town"
+      },
+      {
+        "role": "assistant",
+        "content": "# University of Central Punjab (UCP) - Johar Town Campus\nThe University of Central Punjab (UCP) is a private university located in Lahore, Pakistan. The Johar Town campus is one of the university's main campuses, offering a wide range of academic programs.\n\n## About UCP\nThe University of Central Punjab was established in 1999 and is recognized by the Higher Education Commission (HEC) of Pakistan. UCP is known for its strong faculty, state-of-the-art facilities, and research-oriented approach.\n\n### Academic Programs\nUCP offers undergraduate, graduate, and postgraduate programs in various fields, including:\n\n* Business and Economics\n* Engineering\n* Computer Science and Information Technology\n* Law\n* Arts and Social Sciences\n* Pharmacy\n* Health Sciences\n\n## Facilities and Infrastructure\nThe Johar Town campus is equipped with modern facilities, including:\n\n* Spacious classrooms and lecture halls\n* Well-equipped laboratories and research centers\n* Library with a vast collection of books and digital resources\n* Sports facilities, including a gymnasium and playgrounds\n* Cafeteria and food courts\n* Separate hostels for male and female students\n\n### Location\nThe Johar Town campus is located in the heart of Lahore, making it easily accessible by public transportation. The address is:\n\nUniversity of Central Punjab\n1 - Khayaban-e-Johar, Block J, Johar Town, Lahore, Pakistan\n\n## Verification\nPlease note that the information provided may be subject to change, and it's always best to verify with current sources for the most up-to-date information. You can visit the official UCP website or contact the university directly for the latest information on programs, facilities, and admissions.\n\nWhat would you like to know more about UCP or its Johar Town campus?"
+      }
+    ],
+    "createdAt": "2026-04-22T05:20:25.620Z",
+    "updatedAt": "2026-04-22T09:20:12.425Z"
+  },
+  {
+    "id": "1777108069215-xdi239",
+    "userId": "cmo8pxynw000hvc1cua7afx0r",
+    "title": "hi",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      },
+      {
+        "role": "assistant",
+        "content": "### Welcome\nHello and welcome. I'm excited to help you with any academic questions or topics you'd like to explore. My goal is to provide clear, concise explanations and help you understand complex concepts in a way that's easy to grasp.\n\n### How Can I Help You?\nWhat subject or topic are you currently studying or interested in learning more about? I'm here to assist you with:\n\n* Breaking down difficult concepts into manageable parts\n* Providing real-world examples to illustrate key ideas\n* Offering step-by-step explanations and guidance\n* Helping you prepare for exams or assignments\n* Exploring new subjects and interests\n\n### Let's Get Started\nPlease feel free to ask me anything, and I'll do my best to help. What's on your mind today?"
+      }
+    ],
+    "createdAt": "2026-04-25T09:07:49.215Z",
+    "updatedAt": "2026-04-25T09:07:53.510Z"
+  }
+]
